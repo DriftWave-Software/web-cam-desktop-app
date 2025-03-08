@@ -1,3 +1,7 @@
-opencv-python
-pillow
-numpy
+django==5.0.2
+pywebview==3.7.1
+numpy==1.24.3
+opencv-python==4.9.0.80
+Pillow==10.2.0
+PyGObject==3.42.2
+pycairo==1.24.0
