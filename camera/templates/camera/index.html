@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Selfie Booth</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; media-src 'self' blob:">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -68,7 +69,7 @@
 <body>
     <div class="container">
         <h1>Selfie Booth</h1>
-        <video id="video" autoplay></video>
+        <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
         <div>
             <button id="capture" class="button">Take Photo</button>
@@ -88,16 +89,28 @@
         // Access the webcam
         async function initCamera() {
             try {
+                // Check if mediaDevices is supported
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('WebRTC is not supported by this browser');
+                }
+
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
-                        width: 640,
-                        height: 480,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
                         facingMode: "user"
-                    } 
+                    },
+                    audio: false
                 });
                 video.srcObject = stream;
+                await video.play();  // Ensure video starts playing
+                
+                // Set canvas size to match video
+                canvas.width = 1280;
+                canvas.height = 720;
             } catch (err) {
                 showMessage('Error accessing camera: ' + err.message, false);
+                console.error('Camera error:', err);
             }
         }
 
@@ -107,39 +120,43 @@
         }
 
         // Capture photo
-        captureButton.addEventListener('click', () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            // Convert to base64
-            const imageData = canvas.toDataURL('image/png');
-            preview.src = imageData;
-            preview.style.display = 'block';
+        captureButton.addEventListener('click', async () => {
+            try {
+                // Draw the current video frame to the canvas
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Convert to base64
+                const imageData = canvas.toDataURL('image/jpeg', 0.95);
+                preview.src = imageData;
+                preview.style.display = 'block';
 
-            // Send to server
-            const formData = new FormData();
-            formData.append('image', imageData);
+                // Create form data
+                const formData = new FormData();
+                formData.append('image', imageData);
 
-            fetch('/capture/', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
+                // Send to server
+                const response = await fetch('/capture/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
                 if (data.success) {
                     showMessage('Photo captured successfully!', true);
                 } else {
-                    showMessage('Error: ' + data.error, false);
+                    showMessage('Error: ' + (data.error || 'Unknown error'), false);
                 }
-            })
-            .catch(error => {
-                showMessage('Error saving photo: ' + error.message, false);
-            });
+            } catch (err) {
+                showMessage('Error capturing photo: ' + err.message, false);
+                console.error('Capture error:', err);
+            }
         });
 
         // Initialize camera when page loads
-        initCamera();
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(initCamera, 1000); // Add a small delay to ensure WebView is ready
+        });
     </script>
 </body>
 </html>

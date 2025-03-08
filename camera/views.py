@@ -9,6 +9,7 @@ import io
 import os
 from django.conf import settings
 import time
+import re
 
 def index(request):
     return render(request, 'camera/index.html')
@@ -22,23 +23,32 @@ def capture(request):
             if not image_data:
                 return JsonResponse({'error': 'No image data received'}, status=400)
 
-            # Remove the data URL prefix
-            image_data = image_data.replace('data:image/png;base64,', '')
+            # Extract the base64 data after the comma
+            image_data = re.sub('^data:image/.+;base64,', '', image_data)
             
-            # Convert base64 to image
+            # Decode base64 string
             image_bytes = base64.b64decode(image_data)
-            image = Image.open(io.BytesIO(image_bytes))
             
-            # Save the image
-            timestamp = int(time.time())
-            filename = f'selfie_{timestamp}.png'
-            save_path = os.path.join(settings.MEDIA_ROOT, filename)
+            # Create a BytesIO object for PIL
+            image_buffer = io.BytesIO(image_bytes)
             
-            # Create the media directory if it doesn't exist
+            # Open the image with PIL
+            image = Image.open(image_buffer)
+            
+            # Convert to RGB if necessary
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Create media directory if it doesn't exist
             os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
             
             # Save the image
-            image.save(save_path, 'PNG')
+            timestamp = int(time.time())
+            filename = f'selfie_{timestamp}.jpg'
+            file_path = os.path.join(settings.MEDIA_ROOT, filename)
+            
+            # Save as JPEG for better compatibility
+            image.save(file_path, 'JPEG', quality=95)
             
             return JsonResponse({
                 'success': True,
@@ -47,6 +57,8 @@ def capture(request):
             })
             
         except Exception as e:
+            import traceback
+            print("Error details:", traceback.format_exc())  # Print detailed error
             return JsonResponse({'error': str(e)}, status=500)
             
     return JsonResponse({'error': 'Invalid request method'}, status=405)
